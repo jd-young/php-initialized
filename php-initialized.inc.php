@@ -700,13 +700,16 @@ function _strip_str($str)
 function _read_tokens($filename)
 {
     $tokens = array();
-	foreach (token_get_all(@file_get_contents($filename)) as $token)
-	{
-		if (!in_array($token[0], array(T_WHITESPACE, T_COMMENT, T_DOC_COMMENT), true)) 
-		{
-			$tokens[] = new Token($token);
-		}
-	}
+    if (!is_readable($filename))
+        echo "$filename not readable - ignored\n";
+    else
+    	foreach (token_get_all(@file_get_contents($filename)) as $token)
+    	{
+    		if (!in_array($token[0], array(T_WHITESPACE, T_COMMENT, T_DOC_COMMENT), true)) 
+    		{
+    			$tokens[] = new Token($token);
+    		}
+    	}
 	return $tokens;
 }
 
@@ -734,6 +737,7 @@ function get_include_file($index, $tokens, $filename)
     $include = '';
 	if ($tokens[$index]->char() === '(')
 	{
+	    $expect_bracket = true;
 	    $index++;
     }
 
