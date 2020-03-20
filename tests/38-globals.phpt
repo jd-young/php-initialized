@@ -11,5 +11,4 @@ $b = 5;
 f();
 ?>
 --EXPECTF--
-Uninitialized global a in %s on line 7
-%s:11: called
+Uninitialized global a in %s on line 7: called from %s:11

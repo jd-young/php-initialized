@@ -9,5 +9,4 @@ function &f() {
 f();
 ?>
 --EXPECTF--
-Uninitialized global $x in %s on line 7
-%s:9: called
+Uninitialized global $x in %s on line 7: called from %s:9

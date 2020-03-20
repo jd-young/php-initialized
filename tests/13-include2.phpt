@@ -5,4 +5,4 @@ Usage of variable inside an included file
 include "./13-include2.inc.php";
 ?>
 --EXPECTF--
-Uninitialized variable $a in %s on line 2
+Uninitialized variable $a in ./13-include2.inc.php on line 2
