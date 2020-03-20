@@ -1,6 +1,50 @@
 <?php
 if (!isset($trace)) $trace = false;
 
+
+/**
+ * A class that allows safe access to tokens, to attempt to avoid nasty 'Fatal error: Unsupported operand types in ...'
+ * errors that stop the php-initialised execution.
+ */
+class Token
+{
+    private $_id;
+    private $_name;
+    private $_line_nr;
+    private $_char;
+
+    public function __construct($token)
+    {
+        if (is_array($token))
+        {
+            // An array where [0] is the ID, ->name() is the name, and [2] is the line number of the token.
+            $this->_id = $token[0];
+            $this->_name = trim($token[1]);
+            $this->_line_nr = $token[2];
+            $this->_char = '';
+        }
+        else
+        {
+            $this->_id = 0;
+            $this->_name = '';
+            $this->_line_nr = 0;
+            $this->_char = $token;
+        }        
+    }
+    
+    public function id()        { return $this->_id; }
+    public function char()      { return $this->_char; }
+    public function name()      { return $this->_name; }
+    public function line_nr()   { return $this->_line_nr; }
+    public function token_str()
+    {
+        return $this->_id > 0 
+                    ? token_name($this->_id) . " " . $this->_name 
+                    : $this->_char;
+    }
+}
+
+
 /** Print usage of uninitialized variables
  * @param string $filename      name of the processed file
  * @param array [$initialized]  initialized variables in keys
@@ -78,17 +122,16 @@ function check_variables($filename,
     {	
     	echo "check_variables($filename, (initialized), $function , $class, $in_string, (tokens), $i, $single_command)\n";
     	print_r($initialized);
-    }
+	}
 	
 	$in_list = false;
 	$shortcircuit = array();
 	for (; $i < count($tokens); $i++)
 	{
 		$token = $tokens[$i];
-        if ($trace)
-		    echo "Token $i: " . (is_array($token) ? token_name($token[0]) . "\t" . trim($token[1]) : "\t$token") . "\n";
+        if ($trace) echo "Token $i: " . $token->token_str() . "\n";
 		
-		if ($token === ')' || $token === ';' || $token === ',')
+		if ($token->char() === ')' || $token->char() === ';' || $token->char() === ',')
 		{
 			while ($shortcircuit && end($shortcircuit) >= count($function_calls))
 			{
@@ -101,9 +144,9 @@ function check_variables($filename,
 		}
 		
 		// variables
-		if ($token[0] === T_VARIABLE)
+		if ($token->id() === T_VARIABLE)
 		{
-			$variable = $token[1];
+			$variable = $token->name();
             if ($trace)
             {
 			    echo "VARIABLE = '$variable': INITIALIZED\n";
@@ -115,11 +158,11 @@ function check_variables($filename,
             }
             
 			if ($variable == '$GLOBALS' && 
-			    $tokens[$i+1] === '[' && 
-			    $tokens[$i+2][0] === T_CONSTANT_ENCAPSED_STRING && 
-			    $tokens[$i+3] === ']') 
+			    $tokens[$i+1]->char() === '[' && 
+			    $tokens[$i+2]->id() === T_CONSTANT_ENCAPSED_STRING && 
+			    $tokens[$i+3]->char() === ']') 
 			{
-				$variable = _strip_str($tokens[$i+2][1]);
+				$variable = _strip_str($tokens[$i+2]->name());
 				if (isset($function_globals[$function]['$' . $variable])) {
 					$variable = '$' . $variable;
 				} else {
@@ -130,42 +173,42 @@ function check_variables($filename,
 			
 //			if ($class && $variable == '$this')
 //			{
-//			    if ($tokens[$i + 1][0] === T_OBJECT_OPERATOR && $tokens[$i + 2][0] == T_STRING)
+//			    if ($tokens[$i + 1]->id() === T_OBJECT_OPERATOR && $tokens[$i + 2]->id() == T_STRING)
 //			    {
-//			        $field = $tokens[$i + 2][1];
-//			        if ($tokens[$i + 3] === '=')
+//			        $field = $tokens[$i + 2]->name();
+//			        if ($tokens[$i + 3]->char() === '=')
 //			        {
 //			            $initialized["$class:\$$field"] = true;
 //			            $fields[$class][$field] = true;
 //			        }
 //			        else if (empty($initialized["$class:\$$field"]) && empty($fields[$class][$field])) 
 //			        {
-//			            $line_nr = $token[2];
+//			            $line_nr = $token->line_nr();
 //    					echo "Uninitialized field $class::\$$field in $filename on line $line_nr\n";
 //			        }
 //			    }
 //			}
 			// JY: I don't like looking backwards, shouldn't this already be dealt with?
-//			else if ($tokens[$i-1][0] === T_DOUBLE_COLON || $variable == '$GLOBALS') {
-			if ($tokens[$i-1][0] === T_DOUBLE_COLON || $variable == '$GLOBALS') {
+//			else if ($tokens[$i-1]->id() === T_DOUBLE_COLON || $variable == '$GLOBALS') {
+			if ($tokens[$i-1]->id() === T_DOUBLE_COLON || $variable == '$GLOBALS') {
 				// ignore static properties and complex globals
 				if ($trace) echo "Ignore static properties and complex globals\n";
-			}
+				}
 			elseif (isset($function_globals[$function][$variable]))
             {
 				if (!$function_globals[$function][$variable]) 
 				{
-					$function_globals[$function][$variable] = ($in_list || $tokens[$i+1] === '=' 
+				    $line_nr = $token->line_nr();
+					$function_globals[$function][$variable] = ($in_list || $tokens[$i+1]->char() === '=' 
 					                                                ? true 
-					                                                : "in $filename on line $token[2]");
+					                                                : "in $filename on line $line_nr");
 				}
 			}
-			elseif ($in_list || $tokens[$i+1] === '=' || !empty($function_calls[count($function_calls) - 1][0]))
+			elseif ($in_list || $tokens[$i+1]->char() === '=' || !empty($function_calls[count($function_calls) - 1][0]))
 			{
 			    if ($trace) 
 			    {
-    			    $next_tok = $tokens[$i+1] === '=';
-    			    echo "in_list = $in_list, next_tok = $next_tok\n";
+    			    $next_tok = $tokens[$i+1]->char() === '=';
     			    if (count($function_calls) > 0)
     			    {
         			    $peeked = $function_calls[count($function_calls) - 1];
@@ -196,101 +239,101 @@ function check_variables($filename,
 				}
 				else
 				{
-				    $line_nr = $token[2];
+				    $line_nr = $token->line_nr();
 					echo "Uninitialized variable $variable in $filename on line $line_nr\n";
 					$initialized[$variable] = true;
 				}
 			}
 		}
-		elseif ($token[0] === T_LIST || $token[0] === T_UNSET) 
+		elseif ($token->id() === T_LIST || $token->id() === T_UNSET) 
 		{
 			$in_list = true;
 		}
 		
 		// foreach
-		elseif ($token[0] === T_AS)
+		elseif ($token->id() === T_AS)
 		{
 			$locals = array();
 			do
 			{
 				$i++;
-				if ($tokens[$i][0] === T_VARIABLE)
+				if ($tokens[$i]->id() === T_VARIABLE)
 				{
-					$locals[$tokens[$i][1]] = true;
+					$locals[$tokens[$i]->name()] = true;
 				}
-			} while ($tokens[$i] !== ')');
+			} while ($tokens[$i]->char() !== ')');
 			array_pop($function_calls);
 			$size = count($function_calls);
 //			echo "foreach: calling check_variables with single_command = $size\n";
 			$i = check_variables($filename, $initialized + $locals, $function, $class, $in_string, $tokens, $i+1, count($function_calls));
 //		    echo "foreach check_variables returned $i\n";
 		}
-
+		
 		// catch
-		elseif ($token[0] === T_CATCH)
+		elseif ($token->id() === T_CATCH)
 		{
 			$locals = array();
 			do
 			{
 				$i++;
-				if ($tokens[$i][0] === T_VARIABLE)
+				if ($tokens[$i]->id() === T_VARIABLE)
 				{
-					$locals[$tokens[$i][1]] = true;
+					$locals[$tokens[$i]->name()] = true;
 				}
-			} while ($tokens[$i+1] !== '{');
+			} while ($tokens[$i+1]->char() !== '{');
 			array_pop($function_calls);
 			$i = check_variables($filename, $initialized + $locals, $function, $class, $in_string, $tokens, $i+2);
 		} 
 		
 		// global
-		elseif ($token[0] === T_GLOBAL && $function)
+		elseif ($token->id() === T_GLOBAL && $function)
 		{
 			do
 			{
 				$i++;
-				if ($tokens[$i][0] === T_VARIABLE)
+				if ($tokens[$i]->id() === T_VARIABLE)
 				{
-					$function_globals[$function][$tokens[$i][1]] = false;
+					$function_globals[$function][$tokens[$i]->name()] = false;
 				}
-			} while ($tokens[$i] !== ';');
-		} 
+			} while ($tokens[$i]->char() !== ';');
+				}
 		
 		// static
-		elseif ($token[0] === T_STATIC && $tokens[$i+1][0] !== T_FUNCTION && $tokens[$i+2][0] !== T_FUNCTION) 
+		elseif ($token->id() === T_STATIC && $tokens[$i+1]->id() !== T_FUNCTION && $tokens[$i+2]->id() !== T_FUNCTION) 
 		{
 			do 
 			{
 				$i++;
-				if ($function && $tokens[$i][0] === T_VARIABLE)
+				if ($function && $tokens[$i]->id() === T_VARIABLE)
 				{
-					$initialized[$tokens[$i][1]] = true;
+					$initialized[$tokens[$i]->name()] = true;
 				}
-			} while ($tokens[$i] !== ';');
-		}
+			} while ($tokens[$i]->char() !== ';');
+				}
 		
 		// function definition
-		elseif ($token[0] === T_FUNCTION)
+		elseif ($token->id() === T_FUNCTION)
 		{
-			if (in_array(T_ABSTRACT, array($tokens[$i-1][0], $tokens[max(0, $i-2)][0], $tokens[max(0, $i-3)][0]), true))
+			if (in_array(T_ABSTRACT, array($tokens[$i-1]->id(), $tokens[max(0, $i-2)]->id(), $tokens[max(0, $i-3)]->id()), true))
 			{
 				do
 				{
 					$i++;
-				} while ($tokens[$i+1] !== ';');
+				} while ($tokens[$i+1]->char() !== ';');
 			}
 			else
 			{
-				$locals = $class && $tokens[$i-1][0] !== T_STATIC && $tokens[$i-2][0] !== T_STATIC
+				$locals = $class && $tokens[$i-1]->id() !== T_STATIC && $tokens[$i-2]->id() !== T_STATIC
 				                ? array('$this' => true) 
 				                : array();
 				$i++;
-				if ($tokens[$i] === '&')
+				if ($tokens[$i]->char() === '&')
 				{
 					$i++;
 				}
-				$name = $tokens[$i] === '(' 
+				$name = $tokens[$i]->char() === '(' 
 				            ? '' 
-				            : ($class ? "$class::" : "") . $tokens[$i][1];
+				            : ($class ? "$class::" : "") . $tokens[$i]->name();
 				if ($name) 
 				{
 					$function_parameters[$name] = array();
@@ -298,66 +341,64 @@ function check_variables($filename,
 				do
 				{
 					$i++;
-					if ($tokens[$i][0] === T_VARIABLE)
+					if ($tokens[$i]->id() === T_VARIABLE)
 					{
         				if ($name) 
         				{
-        				    $var_name = $tokens[$i][1];
-        				    $is_ref = $tokens[$i-1] === '&';
+        				    $var_name = $tokens[$i]->name();
+        				    $is_ref = $tokens[$i-1]->char() === '&';
     						$function_parameters[$name][$var_name] = $is_ref;
     						if ($trace) echo "function_parameters[$name][$var_name] = $is_ref\n";
     				    }
-						if ($tokens[$i-1] !== '&')
+						if ($tokens[$i-1]->char() !== '&')
 						{
-							$locals[$tokens[$i][1]] = true;
+							$locals[$tokens[$i]->name()] = true;
 						}
 					}
-				} while ($tokens[$i+1] !== '{');
+				} while ($tokens[$i+1]->char() !== '{');
 				if ($trace) 
     			{
         			if (isset($function_parameters[$name]))
         			{
         			    echo "function_parameters[$name]:\n";
         			    print_r($function_parameters[$name]);
-        		    }
+						}
                     else
                     {
         			    echo "function_parameters[$name]: not set\n";
-                    }
-                }
+						}
+					}
 				$i = check_variables($filename, $locals, $name, ($function ? "" : $class), $in_string, $tokens, $i+2);
 			}
 		}
-
+		
 		// function call
-		elseif ($token[0] === T_STRING && $tokens[$i+1] === '(')
+		elseif ($token->id() === T_STRING && $tokens[$i+1]->char() === '(')
 		{
-			$name = $token[1];
+			$name = $token->name();
 			$class_name = "";
-			if (($tokens[$i-1][0] === T_DOUBLE_COLON && $tokens[$i-2][1] === 'self') ||
-			    ($tokens[$i-1][0] === T_OBJECT_OPERATOR && 
-                 is_array($tokens[$i-2]) && 
-			     $tokens[$i-2][1] === '$this')) 
+			if (($tokens[$i-1]->id() === T_DOUBLE_COLON    && $tokens[$i-2]->name() === 'self') ||
+			    ($tokens[$i-1]->id() === T_OBJECT_OPERATOR && $tokens[$i-2]->name() === '$this')) 
 			{
 				$class_name = $class;
 			    if ($trace) echo "'self::' or '\$this' -> $class_name\n";
 			}
-			elseif ($tokens[$i-1][0] === T_DOUBLE_COLON && $tokens[$i-2][1] === 'parent')
+			elseif ($tokens[$i-1]->id() === T_DOUBLE_COLON && $tokens[$i-2]->name() === 'parent')
 			{
 				$class_name = $extends[$class];
 			    if ($trace) echo "'parent::' -> $class_name\n";
 			}
-			elseif ($tokens[$i-1][0] === T_DOUBLE_COLON && $tokens[$i-2][0] === T_STRING)
+			elseif ($tokens[$i-1]->id() === T_DOUBLE_COLON && $tokens[$i-2]->id() === T_STRING)
 			{
-				$class_name = $tokens[$i-2][1];
+				$class_name = $tokens[$i-2]->name();
 			    if ($trace) echo "named class -> $class_name'\n";
             }
 			elseif (!strcasecmp($name, "define") && 
-			        $tokens[$i+2][0] === T_CONSTANT_ENCAPSED_STRING &&
-			        $tokens[$i+3] === ',')
+			        $tokens[$i+2]->id() === T_CONSTANT_ENCAPSED_STRING &&
+			        $tokens[$i+3]->char() === ',')
 			{
 			    // constant definition
-				$globals[_strip_str($tokens[$i+2][1])] = true;
+				$globals[_strip_str($tokens[$i+2]->name())] = true;
 			}
 			elseif (!strcasecmp($name, "session_start")) 
 			{
@@ -427,79 +468,80 @@ function check_variables($filename,
 						if ($info === true) {
 							$initialized[$variable] = true;
 						} elseif (is_string($info) && !isset($initialized[$variable])) {
-							echo "Uninitialized global $variable $info: called from $filename:$token[2]\n";
+						    $line_nr = $token->line_nr();
+							echo "Uninitialized global $variable $info: called from $filename:$line_nr\n";
 						}
 					}
 				}
 			}
 		
 		// strings
-		} elseif ($token === '"') {
+		} elseif ($token->char() === '"') {
 			$in_string = !$in_string;
 		}
 
         // namespaces (pretty much ignored)
-        elseif ($token[0] === T_NAMESPACE || $token[0] === T_USE) 
+        elseif ($token->id() === T_NAMESPACE || $token->id() === T_USE) 
         {
             $i = _skip_to(';', $i, $tokens);
         }
-        
+		
 		// constants
-		elseif (!$in_string && $token[0] === T_STRING &&
-		        !in_array($tokens[$i-1][0], array(T_OBJECT_OPERATOR, T_NEW, T_INSTANCEOF), true) &&
-		        $tokens[$i+1][0] !== T_DOUBLE_COLON)
+		elseif (!$in_string && $token->id() === T_STRING &&
+		        !in_array($tokens[$i-1]->id(), array(T_OBJECT_OPERATOR, T_NEW, T_INSTANCEOF), true) &&
+		        $tokens[$i+1]->id() !== T_DOUBLE_COLON)
 		{
 		    // not properties and classes
-			$name = $token[1];
-            if ($trace) echo "Constants name = '$name'\n";
-		    if ($tokens[$i-1][0] === T_CONST)
+			$name = $token->name();
+		    if ($trace) echo "Constants name = '$name'\n";
+		    if ($tokens[$i-1]->id() === T_CONST)
 		    {
 				$globals[($class ? "$class::" : "") . $name] = true;
-    		}
+				}
     		else
     		{
-				if ($tokens[$i-1][0] === T_DOUBLE_COLON)
+				if ($tokens[$i-1]->id() === T_DOUBLE_COLON)
 				{
-					$name = (!strcasecmp($tokens[$i-2][1], "self")
+					$name = (!strcasecmp($tokens[$i-2]->name(), "self")
 					        ? $class 
-					        : $tokens[$i-2][1]) . "::$name"; //! extends
+					        : $tokens[$i-2]->name()) . "::$name"; //! extends
 				}
 				if (!defined($name) && !isset($globals[$name]))
 				{
 				    //! case-insensitive constants
-				    $line_nr = $token[2];
+				    $line_nr = $token->line_nr();
 					echo "Uninitialized constant $name in $filename on line $line_nr\n";
 				}
-		    }
-		}
+				}
+			}
 		
 		// class
-		elseif ($token[0] === T_CLASS) 
+		elseif ($token->id() === T_CLASS) 
 		{
 			$i++;
 			$token = $tokens[$i];
-			while ($tokens[$i+1] !== '{') 
+			while ($tokens[$i+1]->char() !== '{') 
 			{
-				if ($tokens[$i][0] === T_EXTENDS)
+				if ($tokens[$i]->id() === T_EXTENDS)
 				{
-					$extends[$tokens[$i-1][1]] = $tokens[$i+1][1];
+					$extends[$tokens[$i-1]->name()] = $tokens[$i+1]->name();
 				}
 				$i++;
 			}
-			$i = check_variables($filename, array(), $function, $token[1], $in_string, $tokens, $i+2);
+			$i = check_variables($filename, array(), $function, $token->name(), $in_string, $tokens, $i+2);
 		}
-		elseif ($token[0] === T_VAR ||
-		        (in_array($token[0], array(T_PUBLIC, T_PRIVATE, T_PROTECTED), true) &&
-		         $tokens[$i+1][0] === T_VARIABLE))
+		elseif ($token->id() === T_VAR ||
+		        (in_array($token->id(), array(T_PUBLIC, T_PRIVATE, T_PROTECTED), true) &&
+		         $tokens[$i+1]->id() === T_VARIABLE))
 		{
 			do 
 			{
 				$i++;
-			} while ($tokens[$i] !== ';');
+			} while ($tokens[$i]->char() !== ';');
 		}
-
+		
 		// include
-		elseif (in_array($token[0], array(T_INCLUDE, T_REQUIRE, T_INCLUDE_ONCE, T_REQUIRE_ONCE), true))
+		elseif (in_array($token->id(), array(T_INCLUDE, T_REQUIRE, T_INCLUDE_ONCE, T_REQUIRE_ONCE), true))
 		{
 			// Figure out the included filename
 			$ret = get_include_file($i, $tokens, $filename);
@@ -525,38 +567,38 @@ function check_variables($filename,
 						}
 					}
 				}
-    			$initialized += check_variables($path . $include, $initialized, $function, $class);
-    	    }
+				$initialized += check_variables($path . $include, $initialized, $function, $class);
+			}
         }
 		
 		// interface
-		elseif ($token[0] === T_INTERFACE)
+		elseif ($token->id() === T_INTERFACE)
 		{
-			while ($tokens[$i+1] !== '}')
+			while ($tokens[$i+1]->char() !== '}')
 			{
 				$i++;
 			}
-		}
-		
+        }
+        		
 		// halt_compiler
-		elseif ($token[0] === T_HALT_COMPILER)
+		elseif ($token->id() === T_HALT_COMPILER)
 		{
 			return $initialized;
 		}
 		
 		// blocks
-		elseif ($token === '(')
+		elseif ($token->char() === '(')
 		{
 		    if ($trace) echo "Hit '(': new function call stack\n";
 			$function_calls[] = array();
 		}
-		elseif ($token === ')')
+		elseif ($token->char() === ')')
 		{
 		    if ($trace) echo "Hit ')': pop function call stack\n";
 			$in_list = false;
 			array_pop($function_calls);
 		}
-		elseif ($token === ',' && $function_calls)
+		elseif ($token->char() === ',' && $function_calls)
 		{
             if ($trace) echo "Hit ',': checking function call parameters\n";
 			if ($function_calls[count($function_calls) - 1] &&
@@ -565,19 +607,19 @@ function check_variables($filename,
 				array_shift($function_calls[count($function_calls) - 1]);
 			}
 		}
-		elseif ($token === '{' || $token[0] === T_CURLY_OPEN || $token[0] === T_DOLLAR_OPEN_CURLY_BRACES)
+		elseif ($token->char() === '{' || $token->id() === T_CURLY_OPEN || $token->id() === T_DOLLAR_OPEN_CURLY_BRACES)
 		{
 //		    echo "Hit open-curly: calling check_variable()\n";
 			$i = check_variables($filename, $initialized, $function, $class, $in_string, $tokens, $i+1);
 //			echo "Returned from calling check_variable() i = $i\n";
 		}
-		elseif ($token === '}' || 
-		        in_array($token[0], array(T_ENDDECLARE, T_ENDFOR, T_ENDFOREACH, T_ENDIF, T_ENDSWITCH, T_ENDWHILE), true))
+		elseif ($token->char() === '}' || 
+		        in_array($token->id(), array(T_ENDDECLARE, T_ENDFOR, T_ENDFOREACH, T_ENDIF, T_ENDSWITCH, T_ENDWHILE), true))
 		{
 			return $i;
 		}
 		elseif (isset($tokens[$i+1]) && 
-		        in_array($tokens[$i+1][0], 
+		        in_array($tokens[$i+1]->id(), 
 		                 array(T_DECLARE, T_SWITCH, T_IF, T_ELSE, T_ELSEIF, T_WHILE, T_DO, T_FOR), true)) 
 		{
 		    // T_FOREACH in T_AS
@@ -590,24 +632,24 @@ function check_variables($filename,
 			                     $i+1, 
 			                     count($function_calls));
 		}
-		elseif (count($function_calls) === $single_command && $token === ':')
+		elseif (count($function_calls) === $single_command && $token->char() === ':')
 		{
 			$i = check_variables($filename, $initialized, $function, $class, $in_string, $tokens, $i+1);
 		}
-		elseif (in_array($token[0], array(T_LOGICAL_OR, T_BOOLEAN_OR, T_LOGICAL_AND, T_BOOLEAN_AND), true) ||
-		        $token === '?')
+		elseif (in_array($token->id(), array(T_LOGICAL_OR, T_BOOLEAN_OR, T_LOGICAL_AND, T_BOOLEAN_AND), true) ||
+		        $token->char() === '?')
         {
 			$shortcircuit[] = count($function_calls);
 		}
-
+		
 		if (count($function_calls) === $single_command && 
-		    ($tokens[$i] === '}' || $tokens[$i] === ';') &&
+		    ($tokens[$i]->char() === '}' || $tokens[$i]->char() === ';') &&
 		    !(isset($tokens[$i+1]) && 
-		    in_array($tokens[$i+1][0], array(T_ELSE, T_ELSEIF, T_CATCH), true)))
+		    in_array($tokens[$i+1]->id(), array(T_ELSE, T_ELSEIF, T_CATCH), true)))
 		{
 		    if ($trace) 
 		    {
-    		    $t = $tokens[$i];
+    		    $t = $tokens[$i]->char();
     		    echo "Hit $t: Returning $i\n";
             }
 			return $i;
@@ -623,7 +665,7 @@ function _skip_to($to_tok, $index, $tokens)
 	{
 		$index++;
 	} 
-	while ($tokens[$index] !== $to_tok);
+	while ($tokens[$index]->char() !== $to_tok);
     return $index;
 }
 
@@ -647,7 +689,7 @@ function _read_tokens($filename)
 	{
 		if (!in_array($token[0], array(T_WHITESPACE, T_COMMENT, T_DOC_COMMENT), true)) 
 		{
-			$tokens[] = $token;
+			$tokens[] = new Token($token);
 		}
 	}
 	return $tokens;
@@ -674,38 +716,38 @@ function get_include_file($index, $tokens, $filename)
     
     $path = '';
     $include = '';
-	if ($tokens[$index] === '(')
+	if ($tokens[$index]->char() === '(')
 	{
 	    $index++;
     }
 
-	if ($tokens[$index][0] === T_STRING && 
-	    !strcasecmp($tokens[$index][1], "dirname") && 
-	    $tokens[$index+1] === '(' && 
-	    $tokens[$index+2][0] === T_FILE && 
-	    $tokens[$index+3] === ')' && 
-	    $tokens[$index+4] === '.')
+	if ($tokens[$index]->id() === T_STRING && 
+	    !strcasecmp($tokens[$index]->name(), "dirname") && 
+	    $tokens[$index+1]->char() === '(' && 
+	    $tokens[$index+2]->id() === T_FILE && 
+	    $tokens[$index+3]->char() === ')' && 
+	    $tokens[$index+4]->char() === '.')
     {
 		$path = dirname($filename);
 		$index += 5;
 	}
 	elseif (is_array($tokens[$index]) &&
-	        !strcasecmp($tokens[$index][1], "__DIR__") && 
-	        $tokens[$index + 1] === '.') 
+	        !strcasecmp($tokens[$index]->name(), "__DIR__") && 
+	        $tokens[$index + 1]->char() === '.') 
 	{
 		$path = dirname($filename);
 		$index += 2;
 	}
 
-	if ($tokens[$index][0] === T_CONSTANT_ENCAPSED_STRING)
+	if ($tokens[$index]->id() === T_CONSTANT_ENCAPSED_STRING)
 	{
-	    $include = _strip_str($tokens[$index][1]);
+	    $include = _strip_str($tokens[$index]->name());
         $index++;
         
-	    if ($expect_bracket && $tokens[$index] === ')') 
+	    if ($expect_bracket && $tokens[$index]->char() === ')') 
 	        $index++;
 
-        if ($tokens[$index] === ';')
+        if ($tokens[$index]->char() === ';')
         {
             $index++;
 		}
