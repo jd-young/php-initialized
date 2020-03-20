@@ -218,7 +218,6 @@ function check_variables($filename,
         			    $peeked = $function_calls[count($function_calls) - 1];
         			    echo "peeked\n";
         			    print_r($peeked);
-        			    echo "peeked is $peeked[0]\n";
         			}
         			else
         			{
@@ -359,7 +358,9 @@ function check_variables($filename,
 							$locals[$tokens[$i]->name()] = true;
 						}
 					}
-				} while ($tokens[$i+1]->char() !== '{');
+				}
+				while ($tokens[$i+1]->char() !== '{');
+				
 				if ($trace) 
     			{
         			if (isset($function_parameters[$name]))
@@ -557,8 +558,6 @@ function check_variables($filename,
 			$path = $ret['path'];
 			$include = $ret['include'];
 			
-//			echo "index = $i, path = '$path', include = '$include'\n";
-			
 			if ($include)
 			{
                 if (!$path && !preg_match('~^(|\.|\.\.)[/\\\\]~', $include)) 
@@ -582,10 +581,8 @@ function check_variables($filename,
 		// interface
 		elseif ($token->id() === T_INTERFACE)
 		{
-			while ($tokens[$i+1]->char() !== '}')
-			{
-				$i++;
-			}
+		    $i = _skip_to('}', $i + 1, $tokens);
+		    $i++;       // Skip past the '}' (otherwise we'll return for a check_variables() call prematurely)
         }
         		
 		// halt_compiler
@@ -629,6 +626,7 @@ function check_variables($filename,
 		elseif ($token->char() === '}' || 
 		        in_array($token->id(), array(T_ENDDECLARE, T_ENDFOR, T_ENDFOREACH, T_ENDIF, T_ENDSWITCH, T_ENDWHILE), true))
 		{
+		    if ($trace) echo "Hit '}' returning $i\n";
 			return $i;
 		}
 		elseif (isset($tokens[$i+1]) && 
@@ -663,7 +661,7 @@ function check_variables($filename,
 		    if ($trace) 
 		    {
     		    $t = $tokens[$i]->char();
-    		    echo "Hit $t: Returning $i\n";
+    		    echo "Hit $t (last if): Returning $i\n";
             }
 			return $i;
 		}

@@ -2,6 +2,31 @@
 <?php
 include dirname(__FILE__) . "/php-initialized.inc.php";
 
+function usage() {
+	echo "Purpose: Checks if PHP code uses only initialized variables\n";
+	echo "Usage: php php-initialized.php [-t] [line-line] <php-file> ...\n";
+	echo "\n";
+	echo "  where\n";
+	echo "    <php-file>        is the PHP file to check.\n";
+	echo "    -t                sets trace mode for debugging.\n";
+	echo "    line-line         is the start and end lines to check in the given\n";
+	echo "                      file(s).  If omitted all lines are checked.\n";
+}
+
+
+$trace = FALSE;
+if (isset($argv[1]) && preg_match('/^-/', $argv[1])) {
+    $opt = $argv[1];
+    if ($opt === '-t')
+        $trace = TRUE;
+    else {
+        echo "Invalid option '$opt'\n";
+        usage();
+        exit (1);
+    }
+    array_shift($argv);
+}
+
 $lines = array();
 if (isset($argv[1]) && preg_match('/^\d+-\d+$/', $argv[1])) {
 	list($min, $max) = explode('-', $argv[1]);
@@ -12,8 +37,7 @@ if (isset($argv[1]) && preg_match('/^\d+-\d+$/', $argv[1])) {
 }
 
 if (!isset($argv[1]) || !glob($argv[1])) {
-	echo "Purpose: Checks if PHP code uses only initialized variables\n";
-	echo "Usage: php php-initialized.php [line-line] filename.php ...\n";
+    usage();
 	exit(1);
 }
 
