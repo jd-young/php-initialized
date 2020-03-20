@@ -69,17 +69,11 @@ function check_variables($filename,
 		$fields = array();
 	}
 
-	if (!isset($tokens)) 
+	if ($tokens == NULL) 
 	{
-		$tokens = array();
-		foreach (token_get_all(@file_get_contents($filename)) as $token)
-		{
-			if (!in_array($token[0], array(T_WHITESPACE, T_COMMENT, T_DOC_COMMENT), true)) 
-			{
-				$tokens[] = $token;
-			}
-		}
+		$tokens = _read_tokens($filename);
 	}
+
     if ($trace)
     {	
     	echo "check_variables($filename, (initialized), $function , $class, $in_string, (tokens), $i, $single_command)\n";
@@ -457,7 +451,7 @@ function check_variables($filename,
 		{
 		    // not properties and classes
 			$name = $token[1];
-//		    echo "Constants name = '$name'\n";
+            if ($trace) echo "Constants name = '$name'\n";
 		    if ($tokens[$i-1][0] === T_CONST)
 		    {
 				$globals[($class ? "$class::" : "") . $name] = true;
@@ -643,11 +637,20 @@ function _strip_str($str)
 }
 
 
-function print_token($index, $token)
+/**
+ * @return a list of Token objects, each containing information about the token type, name, line number etc.
+ */
+function _read_tokens($filename)
 {
-	echo "Token $index: " . (is_array($token) 
-                    	        ? token_name($token[0]) . "\t" . trim($token[1]) 
-                    	        : " $token") . "\n";
+    $tokens = array();
+	foreach (token_get_all(@file_get_contents($filename)) as $token)
+	{
+		if (!in_array($token[0], array(T_WHITESPACE, T_COMMENT, T_DOC_COMMENT), true)) 
+		{
+			$tokens[] = $token;
+		}
+	}
+	return $tokens;
 }
 
 
