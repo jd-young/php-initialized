@@ -3,6 +3,7 @@ Usage of $this inside a static method
 --FILE--
 <?php
 class A {
+    var $a;
 	static function f() {
 		echo $this->a;
 	}
@@ -12,4 +13,4 @@ class A {
 }
 ?>
 --EXPECTF--
-Uninitialized variable $this in %s on line 7
+Uninitialized variable $this in %s on line 8

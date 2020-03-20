@@ -11,8 +11,12 @@ class A {
 	function f() {
 		echo $a;
 		echo $this->a;
+		echo $this->b;
+		echo $this->c;
+		echo $this->z;
 	}
 }
 ?>
 --EXPECTF--
 Uninitialized variable $a in %s on line 12
+Uninitialized field A::$z in %s on line 16

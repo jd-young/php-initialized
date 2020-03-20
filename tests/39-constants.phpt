@@ -1,5 +1,5 @@
 --TEST--
-Constants
+Constants (TODO: This should also report 'b' on line 10 as unitialised? - it's an undefined index)
 --FILE--
 <?php
 define("defined", 1);

@@ -92,7 +92,7 @@ function check_variables($filename,
     // ???
 	static $extends;
 	
-	// The class fields that are initialised.
+	// A hash of declared class fields (format is class::$name).
 	static $fields;
 
 	if (func_num_args() < 2) 
@@ -139,6 +139,7 @@ function check_variables($filename,
 			}
 			foreach ($initialized as $key => $val)
 			{
+			    // TODO: Is this so as not to report the same variable over and over?
 				$initialized[$key] = true; // confirm assignment
 			}
 		}
@@ -149,12 +150,14 @@ function check_variables($filename,
 			$variable = $token->name();
             if ($trace)
             {
-			    echo "VARIABLE = '$variable': INITIALIZED\n";
+			    echo "VARIABLE = '$variable': class = '$class' INITIALIZED\n";
 			    print_r($initialized);
 //    			echo "GLOBALS\n";
 //    			print_r($globals);
     		    echo "Function '$function' parameters:\n";
     		    print_r($function_parameters);
+    		    echo "Fields...\n";
+    		    print_r($fields);
             }
             
 			if ($variable == '$GLOBALS' && 
@@ -171,29 +174,30 @@ function check_variables($filename,
 				$i += 3;
 			}
 			
-//			if ($class && $variable == '$this')
-//			{
-//			    if ($tokens[$i + 1]->id() === T_OBJECT_OPERATOR && $tokens[$i + 2]->id() == T_STRING)
-//			    {
-//			        $field = $tokens[$i + 2]->name();
-//			        if ($tokens[$i + 3]->char() === '=')
-//			        {
-//			            $initialized["$class:\$$field"] = true;
-//			            $fields[$class][$field] = true;
-//			        }
-//			        else if (empty($initialized["$class:\$$field"]) && empty($fields[$class][$field])) 
-//			        {
-//			            $line_nr = $token->line_nr();
-//    					echo "Uninitialized field $class::\$$field in $filename on line $line_nr\n";
-//			        }
-//			    }
-//			}
+            if ($class && $variable === '$this' && !empty($initialized['$this']))
+			{
+			    if ($tokens[$i + 1]->id() === T_OBJECT_OPERATOR && $tokens[$i + 2]->id() == T_STRING)
+			    {
+			        // Function call or reference a field?
+			        $func_or_field = $tokens[$i + 2]->name();
+			        if (!isset($function_parameters["$class::$func_or_field"]))
+			        {
+			            $field= $func_or_field;
+                        if (empty($fields["$class::\$$field"])) 
+    			        {
+    			            $line_nr = $token->line_nr();
+        					echo "Uninitialized field $class::\$$field in $filename on line $line_nr\n";
+    			        }
+    			    }
+			    }
+			}
+			
 			// JY: I don't like looking backwards, shouldn't this already be dealt with?
-//			else if ($tokens[$i-1]->id() === T_DOUBLE_COLON || $variable == '$GLOBALS') {
-			if ($tokens[$i-1]->id() === T_DOUBLE_COLON || $variable == '$GLOBALS') {
+			elseif ($tokens[$i-1]->id() === T_DOUBLE_COLON || $variable == '$GLOBALS') 
+			{
 				// ignore static properties and complex globals
 				if ($trace) echo "Ignore static properties and complex globals\n";
-				}
+			}
 			elseif (isset($function_globals[$function][$variable]))
             {
 				if (!$function_globals[$function][$variable]) 
@@ -366,8 +370,8 @@ function check_variables($filename,
                     else
                     {
         			    echo "function_parameters[$name]: not set\n";
-						}
 					}
+				}
 				$i = check_variables($filename, $locals, $name, ($function ? "" : $class), $in_string, $tokens, $i+2);
 			}
 		}
@@ -530,14 +534,18 @@ function check_variables($filename,
 			}
 			$i = check_variables($filename, array(), $function, $token->name(), $in_string, $tokens, $i+2);
 		}
-		elseif ($token->id() === T_VAR ||
-		        (in_array($token->id(), array(T_PUBLIC, T_PRIVATE, T_PROTECTED), true) &&
-		         $tokens[$i+1]->id() === T_VARIABLE))
+		
+		// Fields
+		elseif (in_array($token->id(), array(T_VAR, T_PUBLIC, T_PRIVATE, T_PROTECTED), true) &&
+		        $tokens[$i+1]->id() === T_VARIABLE)
 		{
-			do 
-			{
-				$i++;
-			} while ($tokens[$i]->char() !== ';');
+		    if ($class)     // We should be in a class, otherwise it's a compilation problem (not ours).
+		    {
+		        // Add fields as initialised...
+		        $field = $tokens[$i+1]->name();
+		        $fields["$class::$field"] = true;
+            }
+            $i = _skip_to(';', $i, $tokens);
 		}
 		
 		// include
@@ -583,6 +591,11 @@ function check_variables($filename,
 		// halt_compiler
 		elseif ($token->id() === T_HALT_COMPILER)
 		{
+		    if ($trace)
+		    {
+		        echo "T_HALT_COMPILER: initialized...\n";
+		        print_r ($initialized);
+		    }
 			return $initialized;
 		}
 		
@@ -655,17 +668,25 @@ function check_variables($filename,
 			return $i;
 		}
 	}
+	
+    if ($trace)
+    {
+        echo "All tokens processed: initialized...\n";
+        print_r ($initialized);
+    }
+
 	return $initialized;
 }
 
 
 function _skip_to($to_tok, $index, $tokens)
 {
+    $len = count($tokens);
 	do 
 	{
 		$index++;
 	} 
-	while ($tokens[$index]->char() !== $to_tok);
+	while ($index < $len && $tokens[$index]->char() !== $to_tok);
     return $index;
 }
 
@@ -708,6 +729,7 @@ function _read_tokens($filename)
  *
  * @param index         the current index of one of the T_INCLUDE token.
  * @param tokens        the tokens for the current file.
+ * @return an array of new index, path to the include file, and the name of the include file.
  */
 function get_include_file($index, $tokens, $filename)
 {
