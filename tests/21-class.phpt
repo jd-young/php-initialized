@@ -14,6 +14,12 @@ class A {
 		echo $this->b;
 		echo $this->c;
 		echo $this->z;
+		
+		$this->g();
+	}
+	
+	function g() {
+	    $this->d = '1';
 	}
 }
 ?>

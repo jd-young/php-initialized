@@ -174,21 +174,17 @@ function check_variables($filename,
 				$i += 3;
 			}
 			
-            if ($class && $variable === '$this' && !empty($initialized['$this']))
+            // Check if we are referencing a field that has not been defined (legal in PHP but not advisable).			
+            if ($class && $variable === '$this' && !empty($initialized['$this']) &&
+			    $tokens[$i + 1]->id() === T_OBJECT_OPERATOR && 
+			    $tokens[$i + 2]->id() == T_STRING &&    // A function name or a field?
+			    $tokens[$i + 3]->char() !== '(')        // '(' means function call
 			{
-			    if ($tokens[$i + 1]->id() === T_OBJECT_OPERATOR && $tokens[$i + 2]->id() == T_STRING)
-			    {
-			        // Function call or reference a field?
-			        $func_or_field = $tokens[$i + 2]->name();
-			        if (!isset($function_parameters["$class::$func_or_field"]))
-			        {
-			            $field= $func_or_field;
-                        if (empty($fields["$class::\$$field"])) 
-    			        {
-    			            $line_nr = $token->line_nr();
-        					echo "Uninitialized field $class::\$$field in $filename on line $line_nr\n";
-    			        }
-    			    }
+			    $field = $tokens[$i + 2]->name();
+                if (empty($fields["$class::\$$field"])) 
+    			{
+    			    $line_nr = $token->line_nr();
+        			echo "Uninitialized field $class::\$$field in $filename on line $line_nr\n";
 			    }
 			}
 			
