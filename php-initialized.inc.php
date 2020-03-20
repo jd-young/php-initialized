@@ -37,7 +37,7 @@ function check_variables($filename, $initialized = array(), $function = "", $cla
 	$shortcircuit = array();
 	for (; $i < count($tokens); $i++) {
 		$token = $tokens[$i];
-		//~ echo (is_array($token) ? token_name($token[0]) . "\t" . trim($token[1]) : "\t$token") . "\n";
+		//~ echo "Token $i: " . (is_array($token) ? token_name($token[0]) . "\t" . trim($token[1]) : "\t$token") . "\n";
 		//~ continue;
 		
 		if ($token === ')' || $token === ';' || $token === ',') {
@@ -174,7 +174,11 @@ function check_variables($filename, $initialized = array(), $function = "", $cla
 				$reflection = ($class_name ? new ReflectionMethod($class_name, $name) : new ReflectionFunction($name));
 				$parameters = array();
 				foreach ($reflection->getParameters() as $parameter) {
-					$parameters[] = ($parameter->isPassedByReference() ? '$' . $parameter->getName() : '');
+					$parameters[] = ($parameter->isPassedByReference() 
+					                    ? ($parameter->isVariadic()
+					                        ? '$...'
+					                        : '$' . $parameter->getName())
+					                    : '');
 				}
 				$function_calls[] = $parameters;
 			} else {
