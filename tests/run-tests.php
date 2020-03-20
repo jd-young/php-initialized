@@ -19,7 +19,9 @@ if (isset($_GET["coverage"])) {
 }
 
 foreach (glob("*.phpt") as $filename) {
-	preg_match("~^--TEST--\n(.*)\n--FILE--\n(.*)\n--EXPECTF--\n(.*)~s", file_get_contents($filename), $match);
+	preg_match("~^--TEST--\n(.*)\n--FILE--\n(.*)\n--EXPECTF--\n(.*)~s", 
+	           str_replace("\r\n", "\n", file_get_contents($filename)),     // DOS -> Unix
+	           $match);
 	ob_start();
 	check_variables($filename);
 	if (!preg_match('(^' . str_replace("%s", ".*", preg_quote($match[3])) . '$)', ob_get_clean())) {
