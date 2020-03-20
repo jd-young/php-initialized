@@ -762,15 +762,9 @@ function get_include_file($index, $tokens, $filename)
 	if ($tokens[$index]->id() === T_CONSTANT_ENCAPSED_STRING)
 	{
 	    $include = _strip_str($tokens[$index]->name());
-        $index++;
         
-	    if ($expect_bracket && $tokens[$index]->char() === ')') 
+	    if ($expect_bracket && $tokens[$index + 1]->char() === ')') 
 	        $index++;
-
-        if ($tokens[$index]->char() === ';')
-        {
-            $index++;
-		}
 	}
 
     return array( 'index' => $index,
