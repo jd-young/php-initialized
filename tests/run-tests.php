@@ -1,4 +1,15 @@
 <?php
+/**
+ *  run-tests.php       Runs tests for php-initialized
+ *
+ * Written by Jakub Vrana, http://php.vrana.cz
+ * @copyright 2008 Jakub Vrana
+ *
+ * Modified by John Young, 26 February 2020
+ *
+ * Run as php-cgi run-tests.php -v [test-file...]
+ *
+ */
 include "../php-initialized.inc.php";
 
 function xhtml_open_tags($s) {
@@ -14,24 +25,85 @@ function xhtml_open_tags($s) {
 	return $return;
 }
 
-if (isset($_GET["coverage"])) {
+$coverage = false;
+$verbose = false;
+$trace = false;
+$files = array();
+
+$this_file = str_replace('.', '_', basename(__FILE__));
+if (isset($_GET[$this_file]))
+{
+    // Called from php-cgi
+    print_r($_GET);
+    foreach ($_GET as $k => $v)
+    {
+        if ($k == $this_file) continue;
+        if ($k == '-c') { $coverage = true; }
+        else if ($k == '-v') { $verbose = true; }
+        else if ($k == '-t') { $trace = true; }
+        else
+        {
+            $files[] = str_replace('_phpt', '.phpt', $k);
+        }
+    }
+    if (empty($files)) $files = glob("*.phpt");     // Default to all .phpt files.
+}
+else
+{
+    // Called from php.
+    $options = getopt("cvt");
+    $coverage = isset($options['c']);
+    $verbose = isset($options['v']);
+    $trace = isset($options['t']);
+
+    array_shift($argv);     // Skip past this filename
+    if ($coverage) array_shift($argv);
+    if ($verbose) array_shift($argv);
+    if ($trace) array_shift($argv);
+    $files = count($argv) > 0 ? $files = $argv : glob("*.phpt");    // Default to all .phpt files.
+}
+
+if ($coverage)
+{
+//	xdebug_start_code_coverage(XDEBUG_CC_UNUSED | XDEBUG_CC_DEAD_CODE | XDEBUG_CC_BRANCH_CHECK);
 	xdebug_start_code_coverage(XDEBUG_CC_UNUSED | XDEBUG_CC_DEAD_CODE);
 }
 
-foreach (glob("*.phpt") as $filename) {
+sort($files, SORT_NUMERIC);
+foreach ($files as $filename)
+{
+    if (!file_exists($filename))
+    {
+        echo "File '$filename' cannot be found\n";
+        continue;
+    }
 	preg_match("~^--TEST--\n(.*)\n--FILE--\n(.*)\n--EXPECTF--\n(.*)~s", 
 	           str_replace("\r\n", "\n", file_get_contents($filename)),     // DOS -> Unix
-	           $match);
+	           $matches);
+	
+	$description = trim($matches[1]);
+	$expected = str_replace("%s", $filename, $matches[3]);     // Replace %s with the filename
 	ob_start();
 	check_variables($filename);
-	if (!preg_match('(^' . str_replace("%s", ".*", preg_quote($match[3])) . '$)', ob_get_clean())) {
-		echo "failed $filename ($match[1])\n";
-	} else {
-		//~ echo "passed $filename ($match[1])\n";
+    $actual = ob_get_clean();
+    
+	if (strcmp($expected, $actual) != 0) 
+	{
+		echo "FAILED $filename ($description)\n";
+		if ($verbose)
+		{
+		    echo "   expected: '$expected'\n";
+		    echo "   but got : '$actual'\n";
+		}
+	}
+	else
+	{
+		echo "Passed $filename ($description)\n";
 	}
 }
 
-if (isset($_GET["coverage"])) {
+if ($coverage)
+{
 	$coverage = xdebug_get_code_coverage();
 	$coverage = $coverage[realpath("../php-initialized.inc.php")];
 	$file = explode("<br />", highlight_file("../php-initialized.inc.php", true));
