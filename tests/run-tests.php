@@ -69,6 +69,9 @@ if ($coverage)
 	xdebug_start_code_coverage(XDEBUG_CC_UNUSED | XDEBUG_CC_DEAD_CODE);
 }
 
+ini_set('include_path', 'inc;lib'); // Simulate the -i option. Include named files in the 'inc' & 'lib' directories.
+$lib_dirs = array('lib');           // Simulate the -l option (don't report anything in files in this directory).
+
 sort($files, SORT_NUMERIC);
 foreach ($files as $filename)
 {

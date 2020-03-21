@@ -2,7 +2,8 @@
 Usage of variable inside an included file
 --FILE--
 <?php
-include "./13-include2.inc.php";
+$a = 1;
+include "./13-include2.inc.php";    // uses both $a & $b
 ?>
 --EXPECTF--
-Uninitialized variable $a in ./13-include2.inc.php on line 2
+Uninitialized variable $b in ./13-include2.inc.php on line 3

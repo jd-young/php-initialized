@@ -2,8 +2,8 @@
 <?php
 include dirname(__FILE__) . "/php-initialized.inc.php";
 
-function usage($err = '') {
-
+function usage($err = '') 
+{
     if ($err) echo "$err\n\n";
 
 	echo "Purpose: Checks if PHP code uses only initialized variables\n";
@@ -11,16 +11,31 @@ function usage($err = '') {
 	echo "\n";
 	echo "  where\n";
 	echo "    <php-file>        is the PHP file to check.\n";
-	echo "    -i <inc-paths>    a PATH_SEPARATOR separated list of include paths.  Remember\n";
-	echo "                      to surround with quotes.\n";
+	echo "    -i <inc-dirs>     a PATH_SEPARATOR separated list of include directories.\n";
+	echo "                      These are added to the 'include_path' php.ini directive.\n";
+	echo "                      Remember to surround with quotes.\n";
+	echo "    -l <lib-dirs>     a PATH_SEPARATOR separated list of library directories.\n";
+	echo "                      These are added to the 'include_path' php.ini directive,\n";
+	echo "                      as per -i files, however any uninitialised variables found\n";
+	echo "                      in these included files will not be reported (not our\n";
+	echo "                      code).  As with -i, remember to surround with quotes.\n";
 	echo "    -t                sets trace mode for debugging.\n";
 	echo "    line-line         is the start and end lines to check in the given\n";
 	echo "                      file(s).  If omitted all lines are checked.\n";
 }
 
+function append_to_inc_path($path)
+{
+    $inc_path = ini_get('include_path');
+    $inc_path .= PATH_SEPARATOR . $path;
+    ini_set('include_path', $inc_path);
+}
 
+
+$lib_dirs = array();
 $trace = FALSE;
-if (isset($argv[1]) && preg_match('/^-/', $argv[1])) {
+while (isset($argv[1]) && preg_match('/^-/', $argv[1])) 
+{
     $opt = $argv[1];
     switch ($opt)
     {
@@ -29,13 +44,22 @@ if (isset($argv[1]) && preg_match('/^-/', $argv[1])) {
             array_shift($argv);
             if (isset($argv[1]))
             {
-                $inc_path = ini_get('include_path');
-                $inc_path .= PATH_SEPARATOR . $argv[1];
-                ini_set('include_path', $inc_path);
+                append_to_inc_path($argv[1]);
                 break;
             }
             usage("Expected <inc-path>");
             exit(1);
+        case '-l':
+            array_shift($argv);
+            if (isset($argv[1]))
+            {
+                append_to_inc_path($argv[1]);
+                $lib_dirs += explode(PATH_SEPARATOR, $argv[1]);
+                break;
+            }
+            usage("Expected <lib-dirs>");
+            exit(1);
+            
         default:
             usage("Invalid option '$opt'");
             exit(1);
@@ -44,7 +68,8 @@ if (isset($argv[1]) && preg_match('/^-/', $argv[1])) {
 }
 
 $lines = array();
-if (isset($argv[1]) && preg_match('/^\d+-\d+$/', $argv[1])) {
+if (isset($argv[1]) && preg_match('/^\d+-\d+$/', $argv[1])) 
+{
 	list($min, $max) = explode('-', $argv[1]);
 	if ($min != $max) {
 		$lines = array($min, $max);

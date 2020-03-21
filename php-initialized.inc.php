@@ -1,6 +1,6 @@
 <?php
 if (!isset($trace)) $trace = false;
-
+if (!isset($lib_dirs)) $lib_dirs = array();
 
 /**
  * A class that allows safe access to tokens, to attempt to avoid nasty 'Fatal error: Unsupported operand types in ...'
@@ -72,6 +72,7 @@ function check_variables($filename,
                          $i = 0, 
                          $single_command = null)
 {
+    // Set true for debugging.
     global $trace;
 
     // The global variables: a hash of '[class::]name' against boolean (true = initialised).
@@ -124,6 +125,7 @@ function check_variables($filename,
     	print_r($initialized);
 	}
 	
+	$report_uninited = !is_lib_file($filename);
 	$in_list = false;
 	$shortcircuit = array();
 	for (; $i < count($tokens); $i++)
@@ -181,7 +183,7 @@ function check_variables($filename,
 			    $tokens[$i + 3]->char() !== '(')        // '(' means function call
 			{
 			    $field = $tokens[$i + 2]->name();
-                if (empty($fields["$class::\$$field"])) 
+                if ($report_uninited && empty($fields["$class::\$$field"])) 
     			{
     			    $line_nr = $token->line_nr();
         			echo "Uninitialized field $class::\$$field in $filename on line $line_nr\n";
@@ -204,7 +206,8 @@ function check_variables($filename,
 					                                                : "in $filename on line $line_nr");
 				}
 			}
-			elseif ($in_list || $tokens[$i+1]->char() === '=' || !empty($function_calls[count($function_calls) - 1][0]))
+			elseif ($in_list || $tokens[$i+1]->char() === '=' || 
+			        !empty($function_calls[count($function_calls) - 1][0]))
 			{
 			    if ($trace) 
 			    {
@@ -236,7 +239,7 @@ function check_variables($filename,
 				{
 					$function_parameters[$function][$variable] = false;
 				}
-				else
+				elseif ($report_uninited)
 				{
 				    $line_nr = $token->line_nr();
 					echo "Uninitialized variable $variable in $filename on line $line_nr\n";
@@ -263,9 +266,14 @@ function check_variables($filename,
 			} while ($tokens[$i]->char() !== ')');
 			array_pop($function_calls);
 			$size = count($function_calls);
-//			echo "foreach: calling check_variables with single_command = $size\n";
-			$i = check_variables($filename, $initialized + $locals, $function, $class, $in_string, $tokens, $i+1, count($function_calls));
-//		    echo "foreach check_variables returned $i\n";
+			$i = check_variables($filename, 
+			                     $initialized + $locals, 
+			                     $function, 
+			                     $class, 
+			                     $in_string, 
+			                     $tokens, 
+			                     $i+1, 
+			                     count($function_calls));
 		}
 		
 		// catch
@@ -313,16 +321,20 @@ function check_variables($filename,
 		// function definition
 		elseif ($token->id() === T_FUNCTION)
 		{
-			if (in_array(T_ABSTRACT, array($tokens[$i-1]->id(), $tokens[max(0, $i-2)]->id(), $tokens[max(0, $i-3)]->id()), true))
+		    $prev_tok = $tokens[$i-1];
+		    $prev_tok2 = $tokens[max(0, $i-2)];
+		    $prev_tok3 = $tokens[max(0, $i-3)];
+			if (in_array(T_ABSTRACT, array($prev_tok->id(), $prev_tok2->id(), $prev_tok3->id()), true))
 			{
 				do
 				{
 					$i++;
-				} while ($tokens[$i+1]->char() !== ';');
+				}
+				while ($tokens[$i+1]->char() !== ';');
 			}
 			else
 			{
-				$locals = $class && $tokens[$i-1]->id() !== T_STATIC && $tokens[$i-2]->id() !== T_STATIC
+				$locals = $class && $prev_tok->id() !== T_STATIC && $prev_tok2->id() !== T_STATIC
 				                ? array('$this' => true) 
 				                : array();
 				$i++;
@@ -464,11 +476,16 @@ function check_variables($filename,
     				print_r($function_calls);
                 }
 
-				if (!$function && isset($function_globals[$name])) {
-					foreach ($function_globals[$name] as $variable => $info) {
-						if ($info === true) {
+				if (!$function && isset($function_globals[$name])) 
+				{
+					foreach ($function_globals[$name] as $variable => $info) 
+					{
+						if ($info === true) 
+						{
 							$initialized[$variable] = true;
-						} elseif (is_string($info) && !isset($initialized[$variable])) {
+						}
+						elseif ($report_uninited && is_string($info) && !isset($initialized[$variable])) 
+						{
 						    $line_nr = $token->line_nr();
 							echo "Uninitialized global $variable $info: called from $filename:$line_nr\n";
 						}
@@ -507,7 +524,7 @@ function check_variables($filename,
 					        ? $class 
 					        : $tokens[$i-2]->name()) . "::$name"; //! extends
 				}
-				if (!defined($name) && !isset($globals[$name]))
+				if ($report_uninited && !defined($name) && !isset($globals[$name]))
 				{
 				    //! case-insensitive constants
 				    $line_nr = $token->line_nr();
@@ -711,6 +728,22 @@ function _read_tokens($filename)
     		}
     	}
 	return $tokens;
+}
+
+
+/**
+ * Figures out if the given filename is a library file or not.
+ *
+ * @param $filename         the name of the file to look at.
+ * @return true if the given file name is in a library directory, false otherwise.
+ */
+function is_lib_file($filename)
+{
+    // Library directories - a list of library directories.  We slurp up initialised variables, but don't report 
+    // bad found in them (not our code).
+    global $lib_dirs;
+    $dir = dirname($filename);
+    return in_array($dir, $lib_dirs);
 }
 
 
